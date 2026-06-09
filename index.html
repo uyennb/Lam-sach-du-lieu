@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phần Mềm Làm Sạch & Chuẩn Hoá Danh Sách Email - Số Điện Thoại</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <i data-lucide="shield-check"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>DataCleaner Pro</h1>
+                    <p>Làm sạch, chuẩn hoá và tối ưu dữ liệu liên hệ</p>
+                </div>
+            </div>
+            <div class="header-controls">
+                <button class="theme-btn" id="theme-toggle" title="Chuyển chế độ sáng/tối">
+                    <i data-lucide="sun" id="theme-icon-sun" style="display:none;"></i>
+                    <i data-lucide="moon" id="theme-icon-moon"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Dashboard -->
+        <div class="stats-grid">
+            <div class="stat-card total">
+                <div class="stat-icon">
+                    <i data-lucide="users"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value" id="stats-total">0</span>
+                    <span class="stat-label">Tổng số dòng</span>
+                </div>
+            </div>
+            <div class="stat-card valid">
+                <div class="stat-icon">
+                    <i data-lucide="check-circle-2"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value" id="stats-valid">0</span>
+                    <span class="stat-label">Thông tin Hợp lệ</span>
+                </div>
+            </div>
+            <div class="stat-card corrected">
+                <div class="stat-icon">
+                    <i data-lucide="sparkles"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value" id="stats-corrected">0</span>
+                    <span class="stat-label">Đã tự động sửa</span>
+                </div>
+            </div>
+            <div class="stat-card invalid">
+                <div class="stat-icon">
+                    <i data-lucide="alert-triangle"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value" id="stats-invalid">0</span>
+                    <span class="stat-label">Lỗi / Trống</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="main-grid">
+            <!-- Left Side: Import & Input -->
+            <div class="card input-section">
+                <div class="card-title">
+                    <i data-lucide="file-text"></i> Nhập dữ liệu thô
+                </div>
+                
+                <div class="textarea-container">
+                    <textarea id="raw-input" placeholder="Dán nội dung bình luận, danh sách email, số điện thoại thô tại đây..."></textarea>
+                    <button class="textarea-overlay-btn" id="load-sample-btn" title="Tải dữ liệu bình luận mẫu từ bình luận của bạn">
+                        <i data-lucide="loader"></i> Nạp bình luận mẫu
+                    </button>
+                </div>
+
+                <div class="dropzone" id="file-dropzone">
+                    <i data-lucide="upload-cloud" class="dropzone-icon" style="width: 32px; height: 32px;"></i>
+                    <text>Kéo thả tệp dữ liệu vào đây</text>
+                    <span>Hỗ trợ định dạng .csv, .txt (Tối đa 5MB)</span>
+                    <input type="file" id="file-input" accept=".csv,.txt" style="display: none;">
+                </div>
+            </div>
+
+            <!-- Right Side: Config & Sidebar -->
+            <div class="config-sidebar">
+                <!-- Cleaner Rules Card -->
+                <div class="card">
+                    <div class="card-title">
+                        <i data-lucide="sliders"></i> Cấu hình chuẩn hoá
+                    </div>
+                    
+                    <div class="rule-group">
+                        <div class="toggle-item">
+                            <div class="toggle-info">
+                                <span class="toggle-title">Xoá khoảng trắng dư thừa</span>
+                                <span class="toggle-desc">Loại bỏ dấu cách bên trong email/SĐT</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="rule-spaces" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-item">
+                            <div class="toggle-info">
+                                <span class="toggle-title">Xoá dấu tiếng Việt email</span>
+                                <span class="toggle-desc">Đổi dạng 'dụnglv' thành 'dunglv'</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="rule-diacritics" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-item">
+                            <div class="toggle-info">
+                                <span class="toggle-title">Sửa lỗi gõ sai tên miền</span>
+                                <span class="toggle-desc">Sửa 'gmai.com', 'gmail.con', 'cơm'</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="rule-typos" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-item">
+                            <div class="toggle-info">
+                                <span class="toggle-title">Chuẩn hoá đầu số (+84)</span>
+                                <span class="toggle-desc">Đổi số điện thoại '+84...' thành '0...'</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="rule-phone-prefix" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-item">
+                            <div class="toggle-info">
+                                <span class="toggle-title">Kiểm tra nhà mạng VN</span>
+                                <span class="toggle-desc">Xác thực SĐT thuộc Viettel, Vina, Mobi...</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="rule-phone-carrier" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Custom Domain Typos Section -->
+                    <div class="custom-domain-section">
+                        <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 6px;">Sửa lỗi tên miền tuỳ chỉnh:</div>
+                        <div class="domain-map-list" id="domain-map-list">
+                            <!-- Items will be generated dynamically -->
+                        </div>
+                        <div class="add-domain-form">
+                            <input type="text" id="domain-from" placeholder="gmai">
+                            <span style="color:var(--text-muted); align-self: center;">→</span>
+                            <input type="text" id="domain-to" placeholder="gmail">
+                            <button class="add-domain-btn" id="add-domain-btn">Thêm</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis breakdown Card -->
+                <div class="card">
+                    <div class="card-title">
+                        <i data-lucide="bar-chart-3"></i> Phân tích nhanh nhà mạng
+                    </div>
+                    <div class="analytics-section" id="carrier-analytics">
+                        <!-- Stats dynamic generation -->
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-labels">
+                                <span>Chưa có dữ liệu</span>
+                                <span>0%</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" style="width: 0%; background: var(--text-muted)"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Table Section -->
+        <div class="card results-card">
+            <div class="table-header">
+                <div class="table-title-container">
+                    <div class="card-title" style="margin-bottom: 0;">
+                        <i data-lucide="table"></i> Kết quả xử lý
+                    </div>
+                    <span class="badge badge-nocontact" id="table-row-count">0 hàng</span>
+                </div>
+                
+                <div class="table-actions">
+                    <input type="text" class="search-table-input" id="table-search" placeholder="Tìm kiếm tên, email, SĐT...">
+                    
+                    <select class="search-table-input" id="table-filter-status" style="width: 140px; cursor: pointer;">
+                        <option value="all">Tất cả trạng thái</option>
+                        <option value="valid">Hợp lệ</option>
+                        <option value="corrected">Đã sửa đổi</option>
+                        <option value="invalid">Lỗi định dạng</option>
+                        <option value="nocontact">Không có liên hệ</option>
+                    </select>
+
+                    <button class="btn btn-secondary" id="btn-copy-emails" title="Sao chép tất cả email hợp lệ vào khay nhớ tạm">
+                        <i data-lucide="copy"></i> Copy Email
+                    </button>
+                    <button class="btn btn-primary" id="btn-export-csv" title="Tải xuống tệp CSV đã chuẩn hoá">
+                        <i data-lucide="download"></i> Xuất CSV
+                    </button>
+                    <button class="btn btn-danger" id="btn-clear-all" title="Xoá sạch toàn bộ dữ liệu">
+                        <i data-lucide="trash-2"></i> Xoá hết
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">STT</th>
+                            <th>Họ và tên</th>
+                            <th>Thời gian</th>
+                            <th>Email gốc</th>
+                            <th>Email sạch (nhấp đúp để sửa)</th>
+                            <th>SĐT gốc</th>
+                            <th>SĐT sạch (nhấp đúp để sửa)</th>
+                            <th>Nhà mạng</th>
+                            <th style="width: 100px;">Trạng thái</th>
+                            <th style="width: 70px; text-align: center;">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr>
+                            <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 3rem 0;">
+                                <i data-lucide="database" style="width: 40px; height: 40px; stroke-width: 1; margin-bottom: 8px;"></i>
+                                <p>Chưa có dữ liệu. Hãy nhập dữ liệu thô ở ô phía trên hoặc bấm "Nạp bình luận mẫu".</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Table Pagination -->
+            <div class="table-footer">
+                <span id="pagination-info">Hiển thị 0 - 0 trong số 0 dòng</span>
+                <div class="pagination-controls">
+                    <button class="page-btn" id="prev-page-btn" disabled>
+                        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+                    </button>
+                    <span class="page-info" id="page-number-display">Trang 1 / 1</span>
+                    <button class="page-btn" id="next-page-btn" disabled>
+                        <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dev Unit Test Dashboard -->
+        <div class="test-panel" id="test-panel">
+            <div class="test-header">
+                <div style="display: flex; align-items: center; gap: 8px; font-weight: 600;">
+                    <i data-lucide="terminal" style="color: var(--primary);"></i>
+                    Hệ thống Kiểm thử logic chuẩn hoá (Browser Unit Tests)
+                </div>
+                <button class="btn btn-secondary" id="run-tests-btn" style="padding: 4px 10px; font-size: 0.75rem;">
+                    <i data-lucide="play" style="width:12px; height:12px;"></i> Chạy Kiểm Thử
+                </button>
+            </div>
+            <div class="test-results" id="test-results">
+                Chưa chạy kiểm thử. Bấm "Chạy Kiểm Thử" để thực hiện các bài kiểm tra chất lượng làm sạch dữ liệu.
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="cleaner.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Init Lucide Icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
