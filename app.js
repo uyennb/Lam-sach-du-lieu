@@ -994,7 +994,7 @@ function exportReportToCSV() {
     }
     
     // Convert array of arrays to CSV string, handling quotes and UTF-8 BOM
-    const csvContent = "\uFEFF" + csvRows.map(row => 
+    const csvContent = "\uFEFFsep=,\n" + csvRows.map(row => 
         row.map(val => {
             const strVal = String(val).replace(/"/g, '""');
             return `"${strVal}"`;
@@ -1066,7 +1066,7 @@ function exportDetailToCSV() {
     });
     
     // Convert array of arrays to CSV string, handling quotes and UTF-8 BOM
-    const csvContent = "\uFEFF" + csvRows.map(row => 
+    const csvContent = "\uFEFFsep=,\n" + csvRows.map(row => 
         row.map(val => {
             const strVal = String(val).replace(/"/g, '""');
             return `"${strVal}"`;
