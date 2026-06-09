@@ -938,25 +938,50 @@ function exportCleanedToCSV() {
     
     // Header columns in Vietnamese UTF-8
     const csvRows = [
-        ['STT', 'Ho ten', 'Thoi gian', 'Email goc', 'Email sach', 'SDT goc', 'SDT sach', 'Nha mang', 'Trang thai email', 'Trang thai SDT']
+        [
+            'STT', 
+            'Họ tên', 
+            'Thời gian / Ngày nộp', 
+            'Dữ liệu gốc (Dòng/Bình luận)', 
+            'Email gốc', 
+            'Email sạch', 
+            'Trạng thái Email',
+            'Trùng Email', 
+            'SĐT gốc', 
+            'SĐT sạch', 
+            'Trạng thái SĐT',
+            'Trùng SĐT',
+            'Nhà mạng', 
+            'Chi tiết thay đổi'
+        ]
     ];
     
     STATE.processed.forEach((rec, idx) => {
+        // Combine change histories
+        const changes = [
+            ...rec.emailChanges.map(c => `[Email] ${c}`),
+            ...rec.phoneChanges.map(c => `[SĐT] ${c}`)
+        ].join('; ');
+        
         csvRows.push([
             idx + 1,
             rec.name,
             rec.timestamp,
-            rec.rawEmail,
-            rec.cleanedEmail,
-            rec.rawPhone,
-            rec.cleanedPhone,
-            rec.carrier,
+            rec.originalComment,
+            rec.rawEmail || 'N/A',
+            rec.cleanedEmail || 'N/A',
             rec.emailStatus,
-            rec.phoneStatus
+            rec.isDuplicateEmail ? 'Bị trùng' : 'Không',
+            rec.rawPhone || 'N/A',
+            rec.cleanedPhone || 'N/A',
+            rec.phoneStatus,
+            rec.isDuplicatePhone ? 'Bị trùng' : 'Không',
+            rec.carrier || 'N/A',
+            changes || 'Không thay đổi'
         ]);
     });
     
-    // Convert array of arrays to CSV string, handling quotes for safety
+    // Convert array of arrays to CSV string, handling quotes and UTF-8 BOM
     const csvContent = "\uFEFF" + csvRows.map(row => 
         row.map(val => {
             const strVal = String(val).replace(/"/g, '""');
@@ -968,13 +993,13 @@ function exportCleanedToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `danh_sach_lien_he_sach_${Date.now()}.csv`);
+    link.setAttribute('download', `bao_cao_chuan_hoa_danh_sach_${Date.now()}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    showToast('Đã tải xuống file CSV chứa dữ liệu làm sạch thành công!', 'success');
+    showToast('Đã tải xuống tệp dữ liệu chi tiết kèm lịch sử chuẩn hoá!', 'success');
 }
 
 function clearAllData(triggerNotification = true) {
