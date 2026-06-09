@@ -285,6 +285,7 @@ const DOM = {
     btnExportReportCsv: document.getElementById('btn-export-report-csv'),
     btnExportCsv: document.getElementById('btn-export-csv'),
     btnClearAll: document.getElementById('btn-clear-all'),
+    csvDelimiter: document.getElementById('csv-delimiter'),
     
     // Pagination
     paginationInfo: document.getElementById('pagination-info'),
@@ -942,15 +943,6 @@ function copyValidEmailsToClipboard() {
         });
 }
 
-function convertToUTF16LE(str) {
-    const buffer = new ArrayBuffer(str.length * 2);
-    const view = new DataView(buffer);
-    for (let i = 0; i < str.length; i++) {
-        view.setUint16(i * 2, str.charCodeAt(i), true); // true for little-endian
-    }
-    return new Uint8Array(buffer);
-}
-
 function exportReportToCSV() {
     if (STATE.processed.length === 0) {
         showToast('Không có dữ liệu để xuất!', 'warning');
@@ -959,6 +951,7 @@ function exportReportToCSV() {
     
     let csvRows = [];
     const isCSVInput = STATE.processed[0].isCSV;
+    const delimiter = DOM.csvDelimiter.value;
     
     if (isCSVInput) {
         // Use original headers
@@ -1002,22 +995,15 @@ function exportReportToCSV() {
         });
     }
     
-    // Convert array of arrays to CSV string, handling quotes
-    const csvContent = "sep=,\n" + csvRows.map(row => 
+    // Convert array of arrays to CSV string, handling quotes and encoding in UTF-8 with BOM
+    const csvContent = "\uFEFF" + csvRows.map(row => 
         row.map(val => {
             const strVal = String(val).replace(/"/g, '""');
             return `"${strVal}"`;
-        }).join(',')
+        }).join(delimiter)
     ).join('\n');
     
-    // Encode to UTF-16LE with BOM
-    const bom = new Uint8Array([0xFF, 0xFE]);
-    const utf16Data = convertToUTF16LE(csvContent);
-    const fileData = new Uint8Array(bom.length + utf16Data.length);
-    fileData.set(bom, 0);
-    fileData.set(utf16Data, bom.length);
-    
-    const blob = new Blob([fileData], { type: 'text/csv;charset=utf-16le;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -1035,6 +1021,8 @@ function exportDetailToCSV() {
         showToast('Không có dữ liệu để xuất!', 'warning');
         return;
     }
+    
+    const delimiter = DOM.csvDelimiter.value;
     
     // Header columns in Vietnamese UTF-8
     const csvRows = [
@@ -1081,22 +1069,15 @@ function exportDetailToCSV() {
         ]);
     });
     
-    // Convert array of arrays to CSV string, handling quotes
-    const csvContent = "sep=,\n" + csvRows.map(row => 
+    // Convert array of arrays to CSV string, handling quotes and encoding in UTF-8 with BOM
+    const csvContent = "\uFEFF" + csvRows.map(row => 
         row.map(val => {
             const strVal = String(val).replace(/"/g, '""');
             return `"${strVal}"`;
-        }).join(',')
+        }).join(delimiter)
     ).join('\n');
     
-    // Encode to UTF-16LE with BOM
-    const bom = new Uint8Array([0xFF, 0xFE]);
-    const utf16Data = convertToUTF16LE(csvContent);
-    const fileData = new Uint8Array(bom.length + utf16Data.length);
-    fileData.set(bom, 0);
-    fileData.set(utf16Data, bom.length);
-    
-    const blob = new Blob([fileData], { type: 'text/csv;charset=utf-16le;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
