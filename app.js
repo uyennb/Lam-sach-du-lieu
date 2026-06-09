@@ -335,8 +335,8 @@ function initApp() {
     DOM.tableFilterStatus.addEventListener('change', handleTableFilterChange);
     
     DOM.btnCopyEmails.addEventListener('click', copyValidEmailsToClipboard);
-    DOM.btnExportReportCsv.addEventListener('click', exportReportToCSV);
-    DOM.btnExportCsv.addEventListener('click', exportDetailToCSV);
+    DOM.btnExportReportCsv.addEventListener('click', exportReportToExcel);
+    DOM.btnExportCsv.addEventListener('click', exportDetailToExcel);
     DOM.btnClearAll.addEventListener('click', clearAllData);
     
     // 8. Pagination Events
@@ -943,34 +943,23 @@ function copyValidEmailsToClipboard() {
         });
 }
 
-function exportReportToCSV() {
+function exportReportToExcel() {
     if (STATE.processed.length === 0) {
         showToast('Không có dữ liệu để xuất!', 'warning');
         return;
     }
     
-    let csvRows = [];
+    let headers = [];
+    let rows = [];
     const isCSVInput = STATE.processed[0].isCSV;
-    const delimiter = DOM.csvDelimiter.value;
     
     if (isCSVInput) {
-        // Use original headers
-        csvRows.push(STATE.processed[0].csvHeaders);
-        
+        headers = STATE.processed[0].csvHeaders;
         STATE.processed.forEach(rec => {
-            csvRows.push(rec.csvData);
+            rows.push(rec.csvData);
         });
     } else {
-        // Standardized report structure for non-CSV inputs
-        csvRows.push([
-            'STT',
-            'Họ tên',
-            'SĐT sạch',
-            'Email sạch',
-            'Nhà mạng',
-            'Trạng thái'
-        ]);
-        
+        headers = ['STT', 'Họ tên', 'SĐT sạch', 'Email sạch', 'Nhà mạng', 'Trạng thái'];
         STATE.processed.forEach((rec, idx) => {
             let status = 'Không liên hệ';
             const isEmailActive = !!rec.rawEmail;
@@ -984,7 +973,7 @@ function exportReportToCSV() {
                 }
             }
             
-            csvRows.push([
+            rows.push([
                 idx + 1,
                 rec.name,
                 rec.cleanedPhone || 'N/A',
@@ -995,63 +984,153 @@ function exportReportToCSV() {
         });
     }
     
-    // Convert array of arrays to CSV string, handling quotes and encoding in UTF-8 with BOM
-    const csvContent = "\uFEFF" + csvRows.map(row => 
-        row.map(val => {
-            const strVal = String(val).replace(/"/g, '""');
-            return `"${strVal}"`;
-        }).join(delimiter)
-    ).join('\n');
+    // Calculate column widths based on maximum character length in each column
+    const colWidths = headers.map((header, colIdx) => {
+        let maxLen = header.length;
+        rows.forEach(row => {
+            const val = row[colIdx];
+            if (val) {
+                maxLen = Math.max(maxLen, String(val).length);
+            }
+        });
+        // Approx pixel width: character count * 8.5 + 30px padding. Min 80px, max 400px.
+        return Math.min(Math.max(maxLen * 8.5 + 30, 80), 400);
+    });
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Build Excel HTML
+    let htmlContent = "\uFEFF" + `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" 
+      xmlns:x="urn:schemas-microsoft-com:office:excel" 
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+    <meta charset="utf-8">
+    <!--[if gte mso 9]>
+    <xml>
+        <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                    <x:Name>Báo cáo chuẩn hoá</x:Name>
+                    <x:WorksheetOptions>
+                        <x:DisplayGridlines/>
+                    </x:WorksheetOptions>
+                </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+    </xml>
+    <![endif]-->
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; }
+        .title { font-size: 15pt; font-weight: bold; text-align: center; height: 35px; color: #E65100; font-family: 'Segoe UI', sans-serif; }
+        .subtitle { font-size: 9.5pt; color: #555555; text-align: center; height: 25px; font-style: italic; font-family: 'Segoe UI', sans-serif; }
+        table { border-collapse: collapse; margin-top: 15px; }
+        th { 
+            background-color: #E65100; /* Dark Orange */
+            color: #FFFFFF; 
+            font-weight: bold; 
+            border: 1px solid #B0BEC5; 
+            padding: 8px 12px; 
+            text-align: center;
+            font-size: 10.5pt;
+            height: 30px;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        td { 
+            border: 1px solid #CFD8DC; 
+            padding: 8px 12px; 
+            font-size: 9.5pt;
+            white-space: normal; /* wraptext */
+            mso-number-format: "\\@"; /* force text formatting to preserve leading zeros */
+            font-family: 'Segoe UI', sans-serif;
+            vertical-align: middle;
+        }
+        .text-center { text-align: center; }
+        .text-left { text-align: left; }
+    </style>
+</head>
+<body>
+    <table>
+        <colgroup>
+            ${colWidths.map(w => `<col style="width: ${w}px;" />`).join('')}
+        </colgroup>
+        <tr>
+            <td colspan="${headers.length}" class="title" style="border:none;">BÁO CÁO DANH SÁCH DỮ LIỆU ĐÃ CHUẨN HOÁ</td>
+        </tr>
+        <tr>
+            <td colspan="${headers.length}" class="subtitle" style="border:none;">Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')} | Tổng cộng: ${rows.length} dòng</td>
+        </tr>
+        <tr>
+            <td colspan="${headers.length}" style="border:none; height:15px;"></td>
+        </tr>
+        <thead>
+            <tr>
+                ${headers.map(h => `<th>${h}</th>`).join('')}
+            </tr>
+        </thead>
+        <tbody>
+            ${rows.map(row => `
+                <tr>
+                    ${row.map((val, colIdx) => {
+                        let alignClass = 'text-left';
+                        const headerName = headers[colIdx] ? headers[colIdx].toLowerCase() : '';
+                        if (headerName.includes('stt') || headerName.includes('ngày') || headerName.includes('trạng thái') || headerName.includes('nhà mạng') || headerName.includes('trùng')) {
+                            alignClass = 'text-center';
+                        }
+                        const displayVal = (val === null || val === undefined) ? '' : String(val);
+                        return `<td class="${alignClass}">${displayVal}</td>`;
+                    }).join('')}
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+</body>
+</html>
+    `;
+    
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `bao_cao_chuan_hoa_${Date.now()}.csv`);
+    link.setAttribute('download', `bao_cao_chuan_hoa_${Date.now()}.xls`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    showToast('Đã tải xuống báo cáo chuẩn hoá!', 'success');
+    showToast('Đã tải xuống báo cáo định dạng Excel!', 'success');
 }
 
-function exportDetailToCSV() {
+function exportDetailToExcel() {
     if (STATE.processed.length === 0) {
         showToast('Không có dữ liệu để xuất!', 'warning');
         return;
     }
     
-    const delimiter = DOM.csvDelimiter.value;
-    
-    // Header columns in Vietnamese UTF-8
-    const csvRows = [
-        [
-            'STT', 
-            'Họ tên', 
-            'Thời gian / Ngày nộp', 
-            'Dữ liệu gốc (Dòng/Bình luận)', 
-            'Email gốc', 
-            'Email sạch', 
-            'Trạng thái Email',
-            'Trùng Email', 
-            'SĐT gốc', 
-            'SĐT sạch', 
-            'Trạng thái SĐT',
-            'Trùng SĐT',
-            'Nhà mạng', 
-            'Chi tiết thay đổi'
-        ]
+    const headers = [
+        'STT', 
+        'Họ tên', 
+        'Thời gian / Ngày nộp', 
+        'Dữ liệu gốc (Dòng/Bình luận)', 
+        'Email gốc', 
+        'Email sạch', 
+        'Trạng thái Email',
+        'Trùng Email', 
+        'SĐT gốc', 
+        'SĐT sạch', 
+        'Trạng thái SĐT',
+        'Trùng SĐT',
+        'Nhà mạng', 
+        'Chi tiết thay đổi'
     ];
     
+    let rows = [];
+    
     STATE.processed.forEach((rec, idx) => {
-        // Combine change histories
         const changes = [
             ...rec.emailChanges.map(c => `[Email] ${c}`),
             ...rec.phoneChanges.map(c => `[SĐT] ${c}`)
         ].join('; ');
         
-        csvRows.push([
+        rows.push([
             idx + 1,
             rec.name,
             rec.timestamp,
@@ -1069,25 +1148,118 @@ function exportDetailToCSV() {
         ]);
     });
     
-    // Convert array of arrays to CSV string, handling quotes and encoding in UTF-8 with BOM
-    const csvContent = "\uFEFF" + csvRows.map(row => 
-        row.map(val => {
-            const strVal = String(val).replace(/"/g, '""');
-            return `"${strVal}"`;
-        }).join(delimiter)
-    ).join('\n');
+    // Calculate column widths based on maximum character length in each column
+    const colWidths = headers.map((header, colIdx) => {
+        let maxLen = header.length;
+        rows.forEach(row => {
+            const val = row[colIdx];
+            if (val) {
+                maxLen = Math.max(maxLen, String(val).length);
+            }
+        });
+        return Math.min(Math.max(maxLen * 8.5 + 30, 80), 400);
+    });
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Build Excel HTML
+    let htmlContent = "\uFEFF" + `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" 
+      xmlns:x="urn:schemas-microsoft-com:office:excel" 
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+    <meta charset="utf-8">
+    <!--[if gte mso 9]>
+    <xml>
+        <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                    <x:Name>Báo cáo chi tiết</x:Name>
+                    <x:WorksheetOptions>
+                        <x:DisplayGridlines/>
+                    </x:WorksheetOptions>
+                </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+    </xml>
+    <![endif]-->
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; }
+        .title { font-size: 15pt; font-weight: bold; text-align: center; height: 35px; color: #E65100; font-family: 'Segoe UI', sans-serif; }
+        .subtitle { font-size: 9.5pt; color: #555555; text-align: center; height: 25px; font-style: italic; font-family: 'Segoe UI', sans-serif; }
+        table { border-collapse: collapse; margin-top: 15px; }
+        th { 
+            background-color: #E65100; /* Dark Orange */
+            color: #FFFFFF; 
+            font-weight: bold; 
+            border: 1px solid #B0BEC5; 
+            padding: 8px 12px; 
+            text-align: center;
+            font-size: 10.5pt;
+            height: 30px;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        td { 
+            border: 1px solid #CFD8DC; 
+            padding: 8px 12px; 
+            font-size: 9.5pt;
+            white-space: normal; /* wraptext */
+            mso-number-format: "\\@"; /* force text formatting to preserve leading zeros */
+            font-family: 'Segoe UI', sans-serif;
+            vertical-align: middle;
+        }
+        .text-center { text-align: center; }
+        .text-left { text-align: left; }
+    </style>
+</head>
+<body>
+    <table>
+        <colgroup>
+            ${colWidths.map(w => `<col style="width: ${w}px;" />`).join('')}
+        </colgroup>
+        <tr>
+            <td colspan="${headers.length}" class="title" style="border:none;">BÁO CÁO CHI TIẾT CHUẨN HOÁ VÀ ĐỐI SOÁT DỮ LIỆU</td>
+        </tr>
+        <tr>
+            <td colspan="${headers.length}" class="subtitle" style="border:none;">Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')} | Tổng cộng: ${rows.length} dòng</td>
+        </tr>
+        <tr>
+            <td colspan="${headers.length}" style="border:none; height:15px;"></td>
+        </tr>
+        <thead>
+            <tr>
+                ${headers.map(h => `<th>${h}</th>`).join('')}
+            </tr>
+        </thead>
+        <tbody>
+            ${rows.map(row => `
+                <tr>
+                    ${row.map((val, colIdx) => {
+                        let alignClass = 'text-left';
+                        const headerName = headers[colIdx] ? headers[colIdx].toLowerCase() : '';
+                        if (headerName.includes('stt') || headerName.includes('ngày') || headerName.includes('trạng thái') || headerName.includes('nhà mạng') || headerName.includes('trùng')) {
+                            alignClass = 'text-center';
+                        }
+                        const displayVal = (val === null || val === undefined) ? '' : String(val);
+                        return `<td class="${alignClass}">${displayVal}</td>`;
+                    }).join('')}
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+</body>
+</html>
+    `;
+    
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `bao_cao_chi_tiet_${Date.now()}.csv`);
+    link.setAttribute('download', `bao_cao_chi_tiet_${Date.now()}.xls`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    showToast('Đã tải xuống tệp dữ liệu chi tiết kèm lịch sử chuẩn hoá!', 'success');
+    showToast('Đã tải xuống báo cáo chi tiết Excel!', 'success');
 }
 
 function clearAllData(triggerNotification = true) {
