@@ -79,9 +79,14 @@
                 
                 <div class="textarea-container">
                     <textarea id="raw-input" placeholder="Dán nội dung bình luận, danh sách email, số điện thoại thô tại đây..."></textarea>
-                    <button class="textarea-overlay-btn" id="load-sample-btn" title="Tải dữ liệu bình luận mẫu từ bình luận của bạn">
-                        <i data-lucide="loader"></i> Nạp bình luận mẫu
-                    </button>
+                    <div style="position: absolute; bottom: 12px; right: 12px; display: flex; gap: 8px;">
+                        <button class="textarea-overlay-btn" id="load-sample-btn" style="position: static;" title="Tải dữ liệu bình luận mẫu từ Facebook">
+                            <i data-lucide="message-square"></i> Nạp bình luận mẫu
+                        </button>
+                        <button class="textarea-overlay-btn" id="load-csv-btn" style="position: static;" title="Tải danh sách CSV nộp tiền mới">
+                            <i data-lucide="file-spreadsheet"></i> Nạp CSV mẫu
+                        </button>
+                    </div>
                 </div>
 
                 <div class="dropzone" id="file-dropzone">

@@ -79,11 +79,9 @@ function extractEmails(text) {
     if (!text) return [];
     
     // Character class representing valid local parts (including Vietnamese letters)
-    const localPartChars = 'a-zA-Z0-9._%+-àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ';
+    const localPartChars = 'a-zA-Z0-9._%+\\-àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ';
     // Character class representing valid domain names
-    const domainPartChars = 'a-zA-Z0-9.-';
-    // Character class representing valid TLDs (including Vietnamese cơm, con typos)
-    const tldPartChars = 'a-zA-Zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđcơmcon';
+    const domainPartChars = 'a-zA-Z0-9.\\-';
     
     const regex = new RegExp(
         `([${localPartChars}]+)\\s*@\\s*([${domainPartChars}]+)\\s*\\.\\s*(cơm|côm|con|com|co|vn|net|org|edu|gov|info|biz|us|uk|io|gmal|gmai)`,
@@ -124,12 +122,9 @@ function extractPhones(text) {
         // Strip out non-digit characters (except leading +)
         const digits = raw.replace(/\D/g, '');
         
-        // A phone number must have between 9 and 11 digits to be realistic (excluding country code additions)
-        // If starting with 84, it would have 11 digits (e.g. 84987654321)
-        // If starting with 0, it would have 10 digits (e.g. 0987654321)
+        // A phone number must have between 9 and 12 digits to be realistic (covers landline & mobile)
         const totalDigits = digits.length;
         
-        // Check if digits length fits typical phone formats
         if (totalDigits >= 9 && totalDigits <= 12) {
             phones.push({
                 raw: raw,
@@ -267,8 +262,9 @@ function cleanPhone(phoneObj, options = {}) {
         }
     }
     
-    // Validation
-    const lengthValid = cleaned.length === 10;
+    // Validation: 10 digits for mobile, 11 digits for landlines starting with '02'
+    const isLandline = cleaned.startsWith('02') && cleaned.length === 11;
+    const lengthValid = cleaned.length === 10 || isLandline;
     const carrier = getVietnameseCarrier(cleaned);
     const hasValidCarrier = !!carrier;
     
@@ -300,11 +296,20 @@ function validateEmailFormat(email) {
 
 /**
  * Find carrier of a Vietnamese phone number
- * @param {string} phone 10-digit phone number starting with 0
+ * @param {string} phone 10-digit mobile or 11-digit landline starting with 0
  * @returns {string|null} Carrier name or null
  */
 function getVietnameseCarrier(phone) {
-    if (!phone || phone.length !== 10 || !phone.startsWith('0')) {
+    if (!phone) return null;
+    
+    // Landline check
+    if (phone.startsWith('02') && phone.length === 11) {
+        if (phone.startsWith('024')) return 'Cố định Hà Nội';
+        if (phone.startsWith('028')) return 'Cố định TP.HCM';
+        return 'Điện thoại cố định';
+    }
+    
+    if (phone.length !== 10 || !phone.startsWith('0')) {
         return null;
     }
     const prefix3 = phone.slice(0, 3);
@@ -328,17 +333,18 @@ function parseTextToRecords(text) {
     const normalizedText = text.replace(/\r\n/g, '\n');
     const lines = normalizedText.split('\n');
     
-    // Check if the text matches the Facebook comment format:
-    // Line 1: Name
-    // Line 2: Timestamp (e.g., "1 giờ trước", "Vừa xong", "10 phút trước")
-    // Line 3...: Comment content
-    // Last line: "Thích · Phản hồi · Count"
+    // Formats supported:
+    // 1. Facebook Comment Block
+    // 2. CSV Table Format
+    // 3. Raw Line-by-Line fallback
     
     const TIMESTAMP_REGEX = /^(vừa xong|vài giây trước|\d+\s*(phút|giờ|ngày|tuần|tháng|năm|m|h|d|w)\s*trước|\d+\s*(min|hour|day|week|month|year)s?\s*ago)/i;
     const REACTION_REGEX = /^(thích|phản hồi|like|reply)\b/i;
     
     let isCommentFormat = false;
-    // Perform a quick scan to detect comment format
+    let isCSVFormat = false;
+    
+    // Perform quick scans to detect format
     for (let i = 1; i < Math.min(lines.length, 30); i++) {
         if (TIMESTAMP_REGEX.test(lines[i].trim())) {
             isCommentFormat = true;
@@ -346,8 +352,22 @@ function parseTextToRecords(text) {
         }
     }
     
+    if (!isCommentFormat && lines.length > 0) {
+        const firstLine = lines[0].trim();
+        const commaCount = (firstLine.match(/,/g) || []).length;
+        if (commaCount >= 2 && (
+            firstLine.toLowerCase().includes('tên') || 
+            firstLine.toLowerCase().includes('email') || 
+            firstLine.toLowerCase().includes('sđt') || 
+            firstLine.toLowerCase().includes('phone') || 
+            firstLine.toLowerCase().includes('stt')
+        )) {
+            isCSVFormat = true;
+        }
+    }
+    
     if (isCommentFormat) {
-        // Segment comments by detecting timestamps
+        // Facebook Comment Parser
         let i = 0;
         while (i < lines.length) {
             const line = lines[i].trim();
@@ -356,42 +376,30 @@ function parseTextToRecords(text) {
                 continue;
             }
             
-            // Check if this line is followed by a timestamp
             if (i + 1 < lines.length && TIMESTAMP_REGEX.test(lines[i + 1].trim())) {
                 const name = line;
                 const timestamp = lines[i + 1].trim();
                 
-                // Collect comment body lines
                 let bodyLines = [];
                 let j = i + 2;
                 while (j < lines.length) {
                     const currentLine = lines[j].trim();
-                    
-                    // Stop if we hit a reaction bar
                     if (REACTION_REGEX.test(currentLine)) {
-                        j++; // skip reaction bar
+                        j++;
                         break;
                     }
-                    
-                    // Stop if we hit another comment starting (name followed by timestamp)
                     if (j + 1 < lines.length && TIMESTAMP_REGEX.test(lines[j + 1].trim())) {
                         break;
                     }
-                    
                     bodyLines.push(lines[j]);
                     j++;
                 }
                 
                 const commentText = bodyLines.join('\n').trim();
-                
-                // Process content
                 const extractedEmails = extractEmails(commentText);
                 const extractedPhones = extractPhones(commentText);
                 
-                // Combine results. If multiple emails/phones are found, create multiple rows
-                const emailsCount = extractedEmails.length;
-                const phonesCount = extractedPhones.length;
-                const maxCount = Math.max(emailsCount, phonesCount, 1);
+                const maxCount = Math.max(extractedEmails.length, extractedPhones.length, 1);
                 
                 for (let k = 0; k < maxCount; k++) {
                     records.push({
@@ -408,7 +416,6 @@ function parseTextToRecords(text) {
                         rawPhone: extractedPhones[k] ? extractedPhones[k].raw : '',
                         phoneDigits: extractedPhones[k] ? extractedPhones[k].digits : '',
                         
-                        // Default cleaned values (will be calculated based on active rules)
                         cleanedEmail: '',
                         cleanedPhone: '',
                         emailStatus: 'No contact',
@@ -418,16 +425,109 @@ function parseTextToRecords(text) {
                         carrier: ''
                     });
                 }
-                
-                i = j; // Advance outer loop
+                i = j;
             } else {
                 i++;
             }
         }
-    }
-    
-    // If we didn't find any comment blocks, or no records were generated, fall back to line-by-line parsing
-    if (records.length === 0) {
+    } else if (isCSVFormat) {
+        // Smart CSV Table Parser
+        let startIndex = 0;
+        const firstLine = lines[0].toLowerCase();
+        // Skip header if it is actually headers label row
+        if (firstLine.includes('tên') || firstLine.includes('email') || firstLine.includes('sđt') || firstLine.includes('stt') || firstLine.includes('phone')) {
+            startIndex = 1;
+        }
+        
+        for (let i = startIndex; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const extractedEmails = extractEmails(line);
+            const extractedPhones = extractPhones(line);
+            
+            let email = '';
+            let emailLocal = '';
+            let emailDomain = '';
+            let emailTld = '';
+            if (extractedEmails.length > 0) {
+                email = extractedEmails[0].raw;
+                emailLocal = extractedEmails[0].local;
+                emailDomain = extractedEmails[0].domain;
+                emailTld = extractedEmails[0].tld;
+            }
+            
+            let phone = '';
+            let phoneDigits = '';
+            if (extractedPhones.length > 0) {
+                const digits = extractedPhones[0].digits;
+                if (digits.length >= 9 && digits.length <= 12) {
+                    phone = extractedPhones[0].raw;
+                    phoneDigits = digits;
+                }
+            }
+            
+            // Guess Name and Date by parsing CSV fields
+            const parts = line.split(',').map(p => p.trim());
+            const nameParts = [];
+            let date = 'N/A';
+            
+            for (const part of parts) {
+                if (!part) continue;
+                
+                // Skip if it contains the email username
+                if (emailLocal && part.toLowerCase().includes(emailLocal.toLowerCase())) continue;
+                // Skip if it is the phone number
+                const cleanPart = part.replace(/\D/g, '');
+                if (phoneDigits && cleanPart && phoneDigits.includes(cleanPart)) continue;
+                // Skip sequence numbers or short indexes
+                if (/^\d+$/.test(cleanPart) && cleanPart.length < 9) continue;
+                // Skip pricing amounts
+                if (/^\$?\d+[\d.,]*\s*(đ|usd)?$/i.test(part)) continue;
+                // Skip date formats
+                if (/^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/.test(part)) continue;
+                if (/^\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{1,4}$/i.test(part)) continue;
+                
+                nameParts.push(part);
+            }
+            
+            let guessedName = nameParts.join(' ').trim();
+            if (!guessedName) {
+                if (parts.length > 1 && !/^\d+$/.test(parts[1].replace(/\D/g, ''))) {
+                    guessedName = parts[1];
+                } else {
+                    guessedName = parts[0] || `User Line ${i}`;
+                }
+            }
+            
+            const datePart = parts.find(part => 
+                /^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/.test(part) ||
+                /^\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{1,4}$/i.test(part)
+            );
+            if (datePart) date = datePart;
+            
+            records.push({
+                id: 'rec_' + Math.random().toString(36).substr(2, 9),
+                name: guessedName,
+                timestamp: date,
+                originalComment: line,
+                rawEmail: email,
+                emailLocal: emailLocal,
+                emailDomain: emailDomain,
+                emailTld: emailTld,
+                rawPhone: phone,
+                phoneDigits: phoneDigits,
+                cleanedEmail: '',
+                cleanedPhone: '',
+                emailStatus: 'No contact',
+                phoneStatus: 'No contact',
+                emailChanges: [],
+                phoneChanges: [],
+                carrier: ''
+            });
+        }
+    } else {
+        // Fallback Line-by-Line Parser
         let lineIndex = 1;
         for (const line of lines) {
             const trimmedLine = line.trim();
@@ -439,12 +539,10 @@ function parseTextToRecords(text) {
             if (extractedEmails.length > 0 || extractedPhones.length > 0) {
                 const maxCount = Math.max(extractedEmails.length, extractedPhones.length);
                 for (let k = 0; k < maxCount; k++) {
-                    // Try to guess a name by stripping the email and phone from the line
                     let guessedName = trimmedLine;
                     if (extractedEmails[k]) guessedName = guessedName.replace(extractedEmails[k].raw, '');
                     if (extractedPhones[k]) guessedName = guessedName.replace(extractedPhones[k].raw, '');
                     
-                    // Clean up punctuation from guessed name
                     guessedName = guessedName.replace(/[:\-–—,;]/g, '').trim();
                     if (!guessedName || guessedName.length > 30) {
                         guessedName = `User Line ${lineIndex}`;
@@ -474,7 +572,6 @@ function parseTextToRecords(text) {
                     });
                 }
             } else {
-                // Keep the row as 'no contact details' if it has content
                 if (trimmedLine.length > 5) {
                     records.push({
                         id: 'rec_' + Math.random().toString(36).substr(2, 9),

@@ -203,6 +203,29 @@ Vừa xong
 ducpv.engineer@gmail.cơm. Cám ơn bác nhiều nha!
 Thích · Phản hồi · 1`;
 
+// User's sample CSV data
+const SAMPLE_CSV = `STT,Họ tên,SĐT,Email,Số tiền đã nộp,Ngày nộp
+1,Nguyễn Văn A,0901234567,nguyenvana@gmail.com,1.500.000,2026-06-08
+2,Trần Thị B,091 234 5678,thibtran99@gmai.com,1,500,000,08/06/2026
+3,Lê Hoàng C,098-765-4321,hoangc_le123@gmal.com,500000đ,8-6-2026
+4,Phạm Thanh D,(024) 3939-3939,huongpt_92@gmail.con,1.200.000,50,06/08/2026
+5,Đỗ Gia E,+84 912 345 678,giabao_do@gmail .com,$100,2026/06/08
+6,Nguyễn Thị F,090.123.4567,maintt_2001@gmail..com,1200000,08-06-2026
+7,Vũ Đức G,098123456,cuongvd90@ gmail.com,1.500.000đ,2026.06.08
+8,Bùi Hữu H,09112345678,hanhbh.nova@gmail.cơm,2.000.000,08/06/26
+9,Lê Văn I,090 123 456,dụnglv@outlook.com,500.000,8/6/2026
+10,Trần Quốc J,0963214567,khuyetdanh_khang@gmai.com,$150,06-08-2026
+11,Hoàng Thị K,097-111-2222,kchim_hoang@gmal.com,1.000.000,2026-6-8
+12,Nguyễn Văn L,0934.567.890,hungnv_work@gmail .com,800000đ,08/06/2026
+13,Phan Thanh M,(028) 7300-8888,tungpt.k35@gmail.con,3,000,000,8-Jun-26
+14,Nguyễn An N,+84909090909,abinh99_vn@gmail..com,1.500.000,06/08/26
+15,Trần Văn O,090-555-666,trietlm95@ gmail.com,1.500.000,50,2026/06/08
+16,Đỗ Thị P,094  222  3333,namnh_se@gmail.cơm,$50,8/6/26
+17,Lê Minh Q,0987.654.321,havo96@gmai.com,2.500.000đ,08-06-2026
+18,Nguyễn Hoàng R,0912345,taiphan_91@gmal.com,1.200.000,2026.06.08
+19,Võ Thị S,096 888 9999,hop.luongbich@gmail.con,1.500.000,08/06/2026
+20,Phan Văn T,090-1234-567,trangdk_94@gmail..com,2000000,8-6-2026`;
+
 // Application State
 const STATE = {
     records: [],          // Raw extracted records
@@ -227,6 +250,7 @@ const DOM = {
     // Inputs
     rawInput: document.getElementById('raw-input'),
     loadSampleBtn: document.getElementById('load-sample-btn'),
+    loadCsvBtn: document.getElementById('load-csv-btn'),
     fileDropzone: document.getElementById('file-dropzone'),
     fileInput: document.getElementById('file-input'),
     
@@ -287,6 +311,7 @@ function initApp() {
     
     // 2. Load Sample Data Trigger
     DOM.loadSampleBtn.addEventListener('click', loadSampleData);
+    DOM.loadCsvBtn.addEventListener('click', loadCsvData);
     
     // 3. Raw Input Change Listener (runs cleaner on typing/paste)
     DOM.rawInput.addEventListener('input', debounce(handleTextInput, 400));
@@ -348,6 +373,12 @@ function toggleTheme() {
 function loadSampleData() {
     DOM.rawInput.value = SAMPLE_COMMENTS;
     showToast('Đã nạp 40 dòng bình luận mẫu để thử nghiệm!', 'success');
+    handleTextInput();
+}
+
+function loadCsvData() {
+    DOM.rawInput.value = SAMPLE_CSV;
+    showToast('Đã nạp 20 dòng danh sách nộp tiền CSV mẫu!', 'success');
     handleTextInput();
 }
 
