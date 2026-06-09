@@ -86,7 +86,7 @@ function extractEmails(text) {
     const tldPartChars = 'a-zA-Zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđcơmcon';
     
     const regex = new RegExp(
-        `([${localPartChars}]+)\\s*@\\s*([${domainPartChars}]+)\\s*\\.\\s*([${tldPartChars}]{2,6})`,
+        `([${localPartChars}]+)\\s*@\\s*([${domainPartChars}]+)\\s*\\.\\s*(cơm|côm|con|com|co|vn|net|org|edu|gov|info|biz|us|uk|io|gmal|gmai)`,
         'gi'
     );
     
@@ -511,7 +511,7 @@ function parseTextToRecords(text) {
  * @returns {Array} Cleaned records
  */
 function processRecords(records, options = {}) {
-    return records.map(rec => {
+    const processed = records.map(rec => {
         const result = { ...rec };
         
         // Process Email
@@ -560,6 +560,55 @@ function processRecords(records, options = {}) {
         }
         
         return result;
+    });
+
+    // Check duplicates
+    const emailSet = new Set();
+    const phoneSet = new Set();
+    const duplicateEmails = new Set();
+    const duplicatePhones = new Set();
+
+    processed.forEach(rec => {
+        if (rec.cleanedEmail && rec.emailStatus !== 'Invalid') {
+            const emailLower = rec.cleanedEmail.toLowerCase();
+            if (emailSet.has(emailLower)) {
+                duplicateEmails.add(emailLower);
+            } else {
+                emailSet.add(emailLower);
+            }
+        }
+        
+        if (rec.cleanedPhone && rec.phoneStatus !== 'Invalid') {
+            if (phoneSet.has(rec.cleanedPhone)) {
+                duplicatePhones.add(rec.cleanedPhone);
+            } else {
+                phoneSet.add(rec.cleanedPhone);
+            }
+        }
+    });
+
+    // Flag duplicate records
+    return processed.map(rec => {
+        if (rec.cleanedEmail && duplicateEmails.has(rec.cleanedEmail.toLowerCase())) {
+            rec.isDuplicateEmail = true;
+            // Avoid adding multiple duplicate warnings if re-cleaned
+            if (!rec.emailChanges.includes('Cảnh báo email trùng lặp')) {
+                rec.emailChanges.push('Cảnh báo email trùng lặp');
+            }
+        } else {
+            rec.isDuplicateEmail = false;
+        }
+        
+        if (rec.cleanedPhone && duplicatePhones.has(rec.cleanedPhone)) {
+            rec.isDuplicatePhone = true;
+            if (!rec.phoneChanges.includes('Cảnh báo SĐT trùng lặp')) {
+                rec.phoneChanges.push('Cảnh báo SĐT trùng lặp');
+            }
+        } else {
+            rec.isDuplicatePhone = false;
+        }
+        
+        return rec;
     });
 }
 

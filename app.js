@@ -680,15 +680,24 @@ function renderTable() {
         // Build email cell content
         let emailCell = '';
         if (rec.rawEmail) {
+            const dupBadge = rec.isDuplicateEmail ? ` <span class="badge badge-corrected" style="font-size:0.68rem; padding:1px 4px; margin-left:4px; vertical-align:middle; background:rgba(245,158,11,0.15); border-color:var(--warning); color:var(--warning);" title="Email bị trùng lặp trong danh sách"><i data-lucide="copy" style="width:10px; height:10px; display:inline-block; vertical-align:middle; margin-right:2px;"></i>Trùng</span>` : '';
             if (rec.emailStatus === 'Corrected') {
                 emailCell = `
                     <div style="display:flex; flex-direction:column;">
                         <span class="original-strikethrough" title="Email gốc">${rec.rawEmail}</span>
-                        <span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedEmail" title="Nhấp đúp để sửa">${rec.cleanedEmail}</span>
+                        <div>
+                            <span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedEmail" title="Nhấp đúp để sửa">${rec.cleanedEmail}</span>
+                            ${dupBadge}
+                        </div>
                     </div>
                 `;
             } else {
-                emailCell = `<span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedEmail" title="Nhấp đúp để sửa">${rec.cleanedEmail || rec.rawEmail}</span>`;
+                emailCell = `
+                    <div>
+                        <span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedEmail" title="Nhấp đúp để sửa">${rec.cleanedEmail || rec.rawEmail}</span>
+                        ${dupBadge}
+                    </div>
+                `;
             }
         } else {
             emailCell = `<span style="color:var(--text-muted); font-style:italic;">Trống</span>`;
@@ -697,15 +706,24 @@ function renderTable() {
         // Build phone cell content
         let phoneCell = '';
         if (rec.rawPhone) {
+            const dupBadge = rec.isDuplicatePhone ? ` <span class="badge badge-corrected" style="font-size:0.68rem; padding:1px 4px; margin-left:4px; vertical-align:middle; background:rgba(245,158,11,0.15); border-color:var(--warning); color:var(--warning);" title="Số điện thoại bị trùng lặp"><i data-lucide="copy" style="width:10px; height:10px; display:inline-block; vertical-align:middle; margin-right:2px;"></i>Trùng</span>` : '';
             if (rec.phoneStatus === 'Corrected') {
                 phoneCell = `
                     <div style="display:flex; flex-direction:column;">
                         <span class="original-strikethrough" title="SĐT gốc">${rec.rawPhone}</span>
-                        <span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedPhone" title="Nhấp đúp để sửa">${rec.cleanedPhone}</span>
+                        <div>
+                            <span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedPhone" title="Nhấp đúp để sửa">${rec.cleanedPhone}</span>
+                            ${dupBadge}
+                        </div>
                     </div>
                 `;
             } else {
-                phoneCell = `<span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedPhone" title="Nhấp đúp để sửa">${rec.cleanedPhone || rec.rawPhone}</span>`;
+                phoneCell = `
+                    <div>
+                        <span class="col-cleaned editable-cell" contenteditable="true" data-id="${rec.id}" data-field="cleanedPhone" title="Nhấp đúp để sửa">${rec.cleanedPhone || rec.rawPhone}</span>
+                        ${dupBadge}
+                    </div>
+                `;
             }
         } else {
             phoneCell = `<span style="color:var(--text-muted); font-style:italic;">Trống</span>`;
