@@ -282,6 +282,7 @@ const DOM = {
     tableFilterStatus: document.getElementById('table-filter-status'),
     tableRowCount: document.getElementById('table-row-count'),
     btnCopyEmails: document.getElementById('btn-copy-emails'),
+    btnExportReportCsv: document.getElementById('btn-export-report-csv'),
     btnExportCsv: document.getElementById('btn-export-csv'),
     btnClearAll: document.getElementById('btn-clear-all'),
     
@@ -333,7 +334,8 @@ function initApp() {
     DOM.tableFilterStatus.addEventListener('change', handleTableFilterChange);
     
     DOM.btnCopyEmails.addEventListener('click', copyValidEmailsToClipboard);
-    DOM.btnExportCsv.addEventListener('click', exportCleanedToCSV);
+    DOM.btnExportReportCsv.addEventListener('click', exportReportToCSV);
+    DOM.btnExportCsv.addEventListener('click', exportDetailToCSV);
     DOM.btnClearAll.addEventListener('click', clearAllData);
     
     // 8. Pagination Events
@@ -875,6 +877,11 @@ function handleCellEdit(cell) {
         if (!rec.emailChanges.includes('Đã chỉnh sửa thủ công')) {
             rec.emailChanges.push('Đã chỉnh sửa thủ công');
         }
+        // Sync to csvData
+        if (rec.isCSV && rec.csvData && rec.emailColIdx !== -1) {
+            rec.csvData = [...rec.csvData];
+            rec.csvData[rec.emailColIdx] = value;
+        }
     } else {
         const hasCarrier = DataCleaner.cleanPhone({
             raw: value,
@@ -886,6 +893,11 @@ function handleCellEdit(cell) {
         rec.carrier = hasCarrier.carrier;
         if (!rec.phoneChanges.includes('Đã chỉnh sửa thủ công')) {
             rec.phoneChanges.push('Đã chỉnh sửa thủ công');
+        }
+        // Sync to csvData
+        if (rec.isCSV && rec.csvData && rec.phoneColIdx !== -1) {
+            rec.csvData = [...rec.csvData];
+            rec.csvData[rec.phoneColIdx] = value;
         }
     }
     
@@ -930,7 +942,79 @@ function copyValidEmailsToClipboard() {
         });
 }
 
-function exportCleanedToCSV() {
+function exportReportToCSV() {
+    if (STATE.processed.length === 0) {
+        showToast('Không có dữ liệu để xuất!', 'warning');
+        return;
+    }
+    
+    let csvRows = [];
+    const isCSVInput = STATE.processed[0].isCSV;
+    
+    if (isCSVInput) {
+        // Use original headers
+        csvRows.push(STATE.processed[0].csvHeaders);
+        
+        STATE.processed.forEach(rec => {
+            csvRows.push(rec.csvData);
+        });
+    } else {
+        // Standardized report structure for non-CSV inputs
+        csvRows.push([
+            'STT',
+            'Họ tên',
+            'SĐT sạch',
+            'Email sạch',
+            'Nhà mạng',
+            'Trạng thái'
+        ]);
+        
+        STATE.processed.forEach((rec, idx) => {
+            let status = 'Không liên hệ';
+            const isEmailActive = !!rec.rawEmail;
+            const isPhoneActive = !!rec.rawPhone;
+            
+            if (isEmailActive || isPhoneActive) {
+                if ((isEmailActive && rec.emailStatus === 'Invalid') || (isPhoneActive && rec.phoneStatus === 'Invalid')) {
+                    status = 'Lỗi định dạng';
+                } else {
+                    status = 'Hợp lệ';
+                }
+            }
+            
+            csvRows.push([
+                idx + 1,
+                rec.name,
+                rec.cleanedPhone || 'N/A',
+                rec.cleanedEmail || 'N/A',
+                rec.carrier || 'N/A',
+                status
+            ]);
+        });
+    }
+    
+    // Convert array of arrays to CSV string, handling quotes and UTF-8 BOM
+    const csvContent = "\uFEFF" + csvRows.map(row => 
+        row.map(val => {
+            const strVal = String(val).replace(/"/g, '""');
+            return `"${strVal}"`;
+        }).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `bao_cao_chuan_hoa_${Date.now()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('Đã tải xuống báo cáo chuẩn hoá!', 'success');
+}
+
+function exportDetailToCSV() {
     if (STATE.processed.length === 0) {
         showToast('Không có dữ liệu để xuất!', 'warning');
         return;
@@ -993,7 +1077,7 @@ function exportCleanedToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `bao_cao_chuan_hoa_danh_sach_${Date.now()}.csv`);
+    link.setAttribute('download', `bao_cao_chi_tiet_${Date.now()}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -1110,6 +1194,17 @@ function runUnitTests() {
     // Test Case 6: Phone Carrier detection
     const carrier = DataCleaner.cleanPhone({ digits: "0987654321" }, { validateCarrier: true });
     assert("Nhận diện nhà mạng Viettel đầu số 098", carrier.carrier === "Viettel" && carrier.isValid === true, "Viettel, Hợp lệ", `${carrier.carrier}, Hợp lệ: ${carrier.isValid}`);
+
+    // Test Case 7: CSV Row Parsing with Quotes and Commas
+    const parsedCsv = DataCleaner.parseCSVText('1,Nguyễn Văn A,"1,500,000",2026-06-08');
+    assert("Phân tích cú pháp CSV có nháy kép và dấu phẩy", parsedCsv[0][2] === "1,500,000", "1,500,000", parsedCsv[0][2]);
+
+    // Test Case 8: CSV Row Alignment for Unquoted Commas
+    const headers = ['STT', 'Họ tên', 'SĐT', 'Email', 'Số tiền', 'Ngày'];
+    const { emailIdx, phoneIdx, dateIdx } = DataCleaner.detectCSVColumns(headers);
+    const unalignedRow = ['2', 'Trần Thị B', '091 234 5678', 'thibtran99@gmai.com', '1', '500', '000', '08/06/2026'];
+    const alignedRow = DataCleaner.alignCSVRow(unalignedRow, headers, emailIdx, phoneIdx, dateIdx);
+    assert("Tự động gộp số tiền chứa dấu phẩy không nháy kép", alignedRow[4] === "1,500,000", "1,500,000", alignedRow[4]);
 
     // Summary
     DOM.testResults.innerHTML += `\nKết quả kiểm thử: Đạt ${passCount}/${passCount + failCount} bài test.`;

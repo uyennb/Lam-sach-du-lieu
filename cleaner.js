@@ -322,6 +322,149 @@ function getVietnameseCarrier(phone) {
 }
 
 /**
+ * Parse standard CSV format supporting quotes, commas within quotes, and line breaks within quotes.
+ * @param {string} text 
+ * @returns {Array} List of rows (each row is an array of strings)
+ */
+function parseCSVText(text) {
+    const lines = [];
+    let currentRow = [];
+    let currentCell = '';
+    let insideQuote = false;
+    
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+        
+        if (char === '"') {
+            if (insideQuote && nextChar === '"') {
+                currentCell += '"';
+                i++; // skip next quote
+            } else {
+                insideQuote = !insideQuote;
+            }
+        } else if (char === ',' && !insideQuote) {
+            currentRow.push(currentCell.trim());
+            currentCell = '';
+        } else if ((char === '\r' || char === '\n') && !insideQuote) {
+            if (char === '\r' && nextChar === '\n') {
+                i++; // skip \n
+            }
+            currentRow.push(currentCell.trim());
+            lines.push(currentRow);
+            currentRow = [];
+            currentCell = '';
+        } else {
+            currentCell += char;
+        }
+    }
+    
+    if (currentCell || currentRow.length > 0) {
+        currentRow.push(currentCell.trim());
+        lines.push(currentRow);
+    }
+    
+    // Filter out completely empty lines
+    return lines.filter(row => row.length > 1 || (row.length === 1 && row[0] !== ''));
+}
+
+/**
+ * Detect index of critical columns (STT, Name, Phone, Email, Date) in a CSV header
+ * @param {Array} headers 
+ * @returns {Object} Column index mappings
+ */
+function detectCSVColumns(headers) {
+    let emailIdx = -1;
+    let phoneIdx = -1;
+    let nameIdx = -1;
+    let dateIdx = -1;
+    
+    headers.forEach((h, idx) => {
+        const headerLower = h.toLowerCase().trim();
+        if (headerLower.includes('email') || headerLower.includes('mail')) {
+            emailIdx = idx;
+        } else if (headerLower.includes('sđt') || headerLower.includes('sdt') || headerLower.includes('phone') || headerLower.includes('điện thoại') || headerLower.includes('đt')) {
+            phoneIdx = idx;
+        } else if (headerLower.includes('họ tên') || headerLower.includes('họ và tên') || headerLower.includes('tên') || headerLower.includes('name') || headerLower.includes('khách hàng')) {
+            nameIdx = idx;
+        } else if (headerLower.includes('ngày') || headerLower.includes('date') || headerLower.includes('thời gian') || headerLower.includes('time')) {
+            dateIdx = idx;
+        }
+    });
+    
+    // Standard default guesses if not detected
+    if (emailIdx === -1) emailIdx = 3;
+    if (phoneIdx === -1) phoneIdx = 2;
+    if (nameIdx === -1) nameIdx = 1;
+    if (dateIdx === -1) dateIdx = 5;
+    
+    return { emailIdx, phoneIdx, nameIdx, dateIdx };
+}
+
+/**
+ * Smart row alignment if columns don't match header length due to unquoted commas in other cells
+ * @param {Array} rowCells 
+ * @param {Array} headers 
+ * @param {number} emailColIdx 
+ * @param {number} phoneColIdx 
+ * @param {number} dateColIdx 
+ * @returns {Array} Aligned row cells matching headers length
+ */
+function alignCSVRow(rowCells, headers, emailColIdx, phoneColIdx, dateColIdx) {
+    if (rowCells.length === headers.length) {
+        return rowCells;
+    }
+    
+    if (rowCells.length < headers.length) {
+        const aligned = [...rowCells];
+        while (aligned.length < headers.length) {
+            aligned.push('');
+        }
+        return aligned;
+    }
+    
+    // rowCells.length > headers.length
+    // Find email and date columns dynamically to locate where unquoted commas are
+    let foundEmailIdx = rowCells.findIndex(cell => cell.includes('@'));
+    let foundDateIdx = rowCells.findLastIndex(cell => 
+        /^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/.test(cell) ||
+        /^\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{1,4}$/i.test(cell)
+    );
+    
+    // Fallback if index not found
+    if (foundEmailIdx === -1) foundEmailIdx = emailColIdx;
+    if (foundDateIdx === -1) foundDateIdx = rowCells.length - 1;
+    
+    const aligned = [];
+    // 1. Copy elements before email (normally STT, Name, SĐT)
+    for (let i = 0; i < foundEmailIdx; i++) {
+        aligned.push(rowCells[i] || '');
+    }
+    // 2. Add email
+    aligned.push(rowCells[foundEmailIdx] || '');
+    
+    // 3. Merge columns between email and date (these are normally unquoted currency/pricing amounts)
+    const amountCells = [];
+    for (let i = foundEmailIdx + 1; i < foundDateIdx; i++) {
+        if (rowCells[i] !== undefined) amountCells.push(rowCells[i]);
+    }
+    aligned.push(amountCells.join(','));
+    
+    // 4. Add date
+    aligned.push(rowCells[foundDateIdx] || '');
+    
+    // Pad or trim if it still deviates from header count
+    while (aligned.length < headers.length) {
+        aligned.push('');
+    }
+    if (aligned.length > headers.length) {
+        aligned.length = headers.length;
+    }
+    
+    return aligned;
+}
+
+/**
  * Parse structured or unstructured text to extract user comments and details
  * @param {string} text Raw text input
  * @returns {Array} List of records
@@ -432,20 +575,40 @@ function parseTextToRecords(text) {
         }
     } else if (isCSVFormat) {
         // Smart CSV Table Parser
+        const csvRows = parseCSVText(text);
+        let headers = [];
         let startIndex = 0;
-        const firstLine = lines[0].toLowerCase();
-        // Skip header if it is actually headers label row
-        if (firstLine.includes('tên') || firstLine.includes('email') || firstLine.includes('sđt') || firstLine.includes('stt') || firstLine.includes('phone')) {
-            startIndex = 1;
+        
+        if (csvRows.length > 0) {
+            const firstRow = csvRows[0];
+            const firstRowStr = firstRow.join(',').toLowerCase();
+            if (firstRowStr.includes('tên') || firstRowStr.includes('email') || firstRowStr.includes('sđt') || firstRowStr.includes('stt') || firstRowStr.includes('phone')) {
+                headers = firstRow;
+                startIndex = 1;
+            }
         }
         
-        for (let i = startIndex; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
+        // Mock headers if not detected
+        if (headers.length === 0 && csvRows.length > 0) {
+            headers = csvRows[0].map((_, idx) => idx === 0 ? 'STT' : `Cột ${idx}`);
+        }
+        
+        const { emailIdx, phoneIdx, nameIdx, dateIdx } = detectCSVColumns(headers);
+        
+        for (let i = startIndex; i < csvRows.length; i++) {
+            const rowCells = csvRows[i];
+            if (rowCells.length === 0 || (rowCells.length === 1 && rowCells[0] === '')) continue;
             
-            const extractedEmails = extractEmails(line);
-            const extractedPhones = extractPhones(line);
+            const alignedRow = alignCSVRow(rowCells, headers, emailIdx, phoneIdx, dateIdx);
             
+            // Extract raw fields using the column indices
+            const rawEmailVal = alignedRow[emailIdx] || '';
+            const rawPhoneVal = alignedRow[phoneIdx] || '';
+            const nameVal = alignedRow[nameIdx] || `Hàng ${i + 1}`;
+            const dateVal = alignedRow[dateIdx] || 'N/A';
+            
+            // Extract emails and phone numbers with fallbacks
+            const extractedEmails = extractEmails(rawEmailVal);
             let email = '';
             let emailLocal = '';
             let emailDomain = '';
@@ -455,68 +618,54 @@ function parseTextToRecords(text) {
                 emailLocal = extractedEmails[0].local;
                 emailDomain = extractedEmails[0].domain;
                 emailTld = extractedEmails[0].tld;
+            } else {
+                // Search whole row for fallback
+                const rowStr = alignedRow.join(',');
+                const fallbackEmails = extractEmails(rowStr);
+                if (fallbackEmails.length > 0) {
+                    email = fallbackEmails[0].raw;
+                    emailLocal = fallbackEmails[0].local;
+                    emailDomain = fallbackEmails[0].domain;
+                    emailTld = fallbackEmails[0].tld;
+                }
             }
             
+            const extractedPhones = extractPhones(rawPhoneVal);
             let phone = '';
             let phoneDigits = '';
             if (extractedPhones.length > 0) {
-                const digits = extractedPhones[0].digits;
-                if (digits.length >= 9 && digits.length <= 12) {
-                    phone = extractedPhones[0].raw;
-                    phoneDigits = digits;
+                phone = extractedPhones[0].raw;
+                phoneDigits = extractedPhones[0].digits;
+            } else {
+                // Search whole row for fallback
+                const rowStr = alignedRow.join(',');
+                const fallbackPhones = extractPhones(rowStr);
+                if (fallbackPhones.length > 0) {
+                    phone = fallbackPhones[0].raw;
+                    phoneDigits = fallbackPhones[0].digits;
                 }
             }
-            
-            // Guess Name and Date by parsing CSV fields
-            const parts = line.split(',').map(p => p.trim());
-            const nameParts = [];
-            let date = 'N/A';
-            
-            for (const part of parts) {
-                if (!part) continue;
-                
-                // Skip if it contains the email username
-                if (emailLocal && part.toLowerCase().includes(emailLocal.toLowerCase())) continue;
-                // Skip if it is the phone number
-                const cleanPart = part.replace(/\D/g, '');
-                if (phoneDigits && cleanPart && phoneDigits.includes(cleanPart)) continue;
-                // Skip sequence numbers or short indexes
-                if (/^\d+$/.test(cleanPart) && cleanPart.length < 9) continue;
-                // Skip pricing amounts
-                if (/^\$?\d+[\d.,]*\s*(đ|usd)?$/i.test(part)) continue;
-                // Skip date formats
-                if (/^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/.test(part)) continue;
-                if (/^\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{1,4}$/i.test(part)) continue;
-                
-                nameParts.push(part);
-            }
-            
-            let guessedName = nameParts.join(' ').trim();
-            if (!guessedName) {
-                if (parts.length > 1 && !/^\d+$/.test(parts[1].replace(/\D/g, ''))) {
-                    guessedName = parts[1];
-                } else {
-                    guessedName = parts[0] || `User Line ${i}`;
-                }
-            }
-            
-            const datePart = parts.find(part => 
-                /^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/.test(part) ||
-                /^\d{1,2}-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{1,4}$/i.test(part)
-            );
-            if (datePart) date = datePart;
             
             records.push({
                 id: 'rec_' + Math.random().toString(36).substr(2, 9),
-                name: guessedName,
-                timestamp: date,
-                originalComment: line,
+                isCSV: true,
+                csvHeaders: headers,
+                csvData: alignedRow,
+                emailColIdx: emailIdx,
+                phoneColIdx: phoneIdx,
+                
+                name: nameVal,
+                timestamp: dateVal,
+                originalComment: rowCells.join(','),
+                
                 rawEmail: email,
                 emailLocal: emailLocal,
                 emailDomain: emailDomain,
                 emailTld: emailTld,
+                
                 rawPhone: phone,
                 phoneDigits: phoneDigits,
+                
                 cleanedEmail: '',
                 cleanedPhone: '',
                 emailStatus: 'No contact',
@@ -656,6 +805,17 @@ function processRecords(records, options = {}) {
             result.carrier = '';
         }
         
+        // Sync cleaned email/phone back into csvData if isCSV
+        if (result.isCSV && result.csvData) {
+            result.csvData = [...result.csvData];
+            if (result.emailColIdx !== -1) {
+                result.csvData[result.emailColIdx] = result.cleanedEmail || result.rawEmail || '';
+            }
+            if (result.phoneColIdx !== -1) {
+                result.csvData[result.phoneColIdx] = result.cleanedPhone || result.rawPhone || '';
+            }
+        }
+        
         return result;
     });
 
@@ -719,6 +879,9 @@ if (typeof window !== 'undefined') {
         cleanPhone,
         parseTextToRecords,
         processRecords,
+        parseCSVText,
+        detectCSVColumns,
+        alignCSVRow,
         DOMAIN_TYPO_MAP,
         TLD_TYPO_MAP,
         VIETNAMESE_CARRIERS
